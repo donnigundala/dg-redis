@@ -54,11 +54,17 @@ func (c *TaggedCache) addTags(ctx context.Context, key string) error {
 
 // Put stores a value in the cache and associates it with the tags.
 func (c *TaggedCache) Put(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	// Serialize the value
+	data, err := c.serializer.Marshal(value)
+	if err != nil {
+		return err
+	}
+
 	// Use a pipeline to ensure both operations happen
 	pipe := c.client.Pipeline()
 
 	// Set the value
-	pipe.Set(ctx, c.prefixKey(key), value, ttl)
+	pipe.Set(ctx, c.prefixKey(key), data, ttl)
 
 	// Add to tag sets
 	prefixedKey := c.prefixKey(key)
@@ -66,7 +72,7 @@ func (c *TaggedCache) Put(ctx context.Context, key string, value interface{}, tt
 		pipe.SAdd(ctx, c.tagKey(tag), prefixedKey)
 	}
 
-	_, err := pipe.Exec(ctx)
+	_, err = pipe.Exec(ctx)
 	return err
 }
 
@@ -75,8 +81,14 @@ func (c *TaggedCache) PutMultiple(ctx context.Context, items map[string]interfac
 	pipe := c.client.Pipeline()
 
 	for key, value := range items {
+		// Serialize each value
+		data, err := c.serializer.Marshal(value)
+		if err != nil {
+			return err
+		}
+
 		prefixedKey := c.prefixKey(key)
-		pipe.Set(ctx, prefixedKey, value, ttl)
+		pipe.Set(ctx, prefixedKey, data, ttl)
 
 		for _, tag := range c.tags {
 			pipe.SAdd(ctx, c.tagKey(tag), prefixedKey)

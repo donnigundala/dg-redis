@@ -103,7 +103,25 @@ func (d *Driver) GetMultiple(ctx context.Context, keys []string) (map[string]int
 	result := make(map[string]interface{})
 	for i, val := range vals {
 		if val != nil {
-			result[keys[i]] = val
+			// Convert to bytes for deserialization
+			var data []byte
+			switch v := val.(type) {
+			case string:
+				data = []byte(v)
+			case []byte:
+				data = v
+			default:
+				continue // Skip if not string or bytes
+			}
+
+			// Try to deserialize
+			var value interface{}
+			if err := d.serializer.Unmarshal(data, &value); err != nil {
+				// Fallback: use as string
+				result[keys[i]] = string(data)
+			} else {
+				result[keys[i]] = value
+			}
 		}
 	}
 
@@ -123,7 +141,12 @@ func (d *Driver) Put(ctx context.Context, key string, value interface{}, ttl tim
 func (d *Driver) PutMultiple(ctx context.Context, items map[string]interface{}, ttl time.Duration) error {
 	pipe := d.client.Pipeline()
 	for key, value := range items {
-		pipe.Set(ctx, d.prefixKey(key), value, ttl)
+		// Serialize each value
+		data, err := d.serializer.Marshal(value)
+		if err != nil {
+			return err
+		}
+		pipe.Set(ctx, d.prefixKey(key), data, ttl)
 	}
 	_, err := pipe.Exec(ctx)
 	return err
