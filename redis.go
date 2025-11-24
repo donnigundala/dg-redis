@@ -60,6 +60,15 @@ func NewDriver(config cache.StoreConfig) (cache.Driver, error) {
 	}, nil
 }
 
+// NewDriverWithClient creates a new Redis cache driver with an existing client.
+func NewDriverWithClient(client *redis.Client, prefix string) *Driver {
+	return &Driver{
+		client:     client,
+		prefix:     prefix,
+		serializer: serializer.NewJSONSerializer(), // Default to JSON
+	}
+}
+
 // prefixKey adds the prefix to the key.
 func (d *Driver) prefixKey(key string) string {
 	if d.prefix == "" {

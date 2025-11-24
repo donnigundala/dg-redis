@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/alicebob/miniredis/v2 v2.35.0
-	github.com/donnigundala/dg-cache v0.0.0
+	github.com/donnigundala/dg-cache v1.2.1
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/stretchr/testify v1.11.1
 )
@@ -19,5 +19,3 @@ require (
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/donnigundala/dg-cache => ../dg-cache
