@@ -5,13 +5,15 @@ import (
 	"time"
 
 	cache "github.com/donnigundala/dg-cache"
+	"github.com/donnigundala/dg-cache/serializer"
 	"github.com/redis/go-redis/v9"
 )
 
 // Driver is a Redis cache driver.
 type Driver struct {
-	client *redis.Client
-	prefix string
+	client     *redis.Client
+	prefix     string
+	serializer serializer.Serializer
 }
 
 // NewDriver creates a new Redis cache driver.
@@ -40,9 +42,21 @@ func NewDriver(config cache.StoreConfig) (cache.Driver, error) {
 		return nil, err
 	}
 
+	// Initialize serializer (default to JSON)
+	var ser serializer.Serializer = serializer.NewJSONSerializer()
+	if val, ok := config.Options["serializer"].(string); ok {
+		switch val {
+		case "msgpack":
+			ser = serializer.NewMsgpackSerializer()
+		case "json":
+			ser = serializer.NewJSONSerializer()
+		}
+	}
+
 	return &Driver{
-		client: client,
-		prefix: config.Prefix,
+		client:     client,
+		prefix:     config.Prefix,
+		serializer: ser,
 	}, nil
 }
 
@@ -56,14 +70,22 @@ func (d *Driver) prefixKey(key string) string {
 
 // Get retrieves a value from the cache.
 func (d *Driver) Get(ctx context.Context, key string) (interface{}, error) {
-	val, err := d.client.Get(ctx, d.prefixKey(key)).Result()
+	data, err := d.client.Get(ctx, d.prefixKey(key)).Bytes()
 	if err == redis.Nil {
 		return nil, cache.ErrKeyNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	return val, nil
+
+	// Try to deserialize
+	var result interface{}
+	if err := d.serializer.Unmarshal(data, &result); err != nil {
+		// Fallback: return as string for backward compatibility
+		return string(data), nil
+	}
+
+	return result, nil
 }
 
 // GetMultiple retrieves multiple values from the cache.
@@ -90,7 +112,11 @@ func (d *Driver) GetMultiple(ctx context.Context, keys []string) (map[string]int
 
 // Put stores a value in the cache with the given TTL.
 func (d *Driver) Put(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
-	return d.client.Set(ctx, d.prefixKey(key), value, ttl).Err()
+	data, err := d.serializer.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return d.client.Set(ctx, d.prefixKey(key), data, ttl).Err()
 }
 
 // PutMultiple stores multiple values in the cache.
